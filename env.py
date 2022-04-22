@@ -13,8 +13,9 @@ class Environment():
         
         self.agents = agents
         if not self.agents:
-            self.agents.append(Cynic(1,0))
-            self.agents.append(EasyMark(1,1))
+            self.agents.append(Cynic(state_size,0))
+            self.agents.append(EasyMark(state_size,1))
+            self.agents.append(TitForTat(state_size,2))
         print(f"Agents: {self.agents}")
         self.total_reward = 0
         num_agents = len(agents)

@@ -51,10 +51,11 @@ class TitForTat(Agent):
         self.ss = state_size
     
     def act(self, state) -> int:
-        print("The EASY MARK cooperates.")
-        return ACTIONS.DEFECT if state[STATE_VARS.OPP_LAST_ACT] is ACTIONS.DEFECT else ACTIONS.COOPERATE
+        action = ACTIONS.DEFECT if int(state[STATE_VARS.OPP_LAST_ACT]) == ACTIONS.DEFECT else ACTIONS.COOPERATE
+        print(f"The TFT {'defects' if action is ACTIONS.DEFECT else 'cooperates'}")
+        return action
 
     
     def get_reward(self, reward) -> None:
         self.reward_total += reward
-        print("The current reward for the EASY MARK is ", self.reward_total)
+        print("The current reward for the TFT is ", self.reward_total)
