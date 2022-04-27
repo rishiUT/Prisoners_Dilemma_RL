@@ -1,11 +1,13 @@
+from argparse import Action
+import os
+os.environ['KMP_DUPLICATE_LIB_OK']='True'
 import agent
 from agent import *
 import numpy as np
-from statevars import STATE_VARS
+from statevars import STATE_VARS, ACTIONS
 from ray.rllib.env.multi_agent_env import MultiAgentEnv, ENV_STATE
 from gym.spaces import Dict, Discrete, MultiDiscrete, Tuple, Box
 from itertools import combinations
-from math import comb
 
 class PDGame(MultiAgentEnv):
     action_space = Discrete(2)
@@ -16,44 +18,103 @@ class PDGame(MultiAgentEnv):
         self.state = None
         self.num_agents = 3
 
-        self._agent_ids = {idx for idx in range(self.NUM_AGENTS)}
+        self._agent_ids = {idx for idx in range(self.num_agents)}
         self.state_size = len(list(STATE_VARS))
-        self.observation_space = MultiDiscrete([2]*self.state_size)
+        self.observation_space = Box(low=float(0), high=float(10), shape=(self.state_size,), dtype=np.float32)
         self.iterations = 10
         self.gen = combinations(range(self.num_agents),2)
-        self.num_matches = comb(self.num_agents,2)
+        self.num_matches = len(list(combinations(range(self.num_agents),2)))
+        self.next_match = next(self.gen)
         self.num_match = 0
+        self.last_acts = np.zeros((self.num_agents, self.num_agents),dtype=int)
+        self.turns_since_defect = np.zeros((self.num_agents), dtype=int)
+        self.agents_num_rounds = np.zeros((self.num_agents), dtype=int)
+        self.total_score = 0
+        self.agent_scores = np.zeros((self.num_agents), dtype=int)
+        self.num_defections = np.zeros((self.num_agents), dtype=int)
+        self.state = np.zeros((self.state_size))
 
     def seed(self, seed=None):
         if seed:
             np.random.seed(seed)
 
+    def action_space_sample(self, agent_ids: list = None):
+        agent_id_0 = self.next_match[0]
+        agent_id_1 = self.next_match[1]
+        # 
+        ret = {
+            agent_id_0 : 0,
+            agent_id_1 : 0,
+        }
+        return ret
+
     def reset(self):
-        self.state = np.zeros((self.num_agents,self.state_size))
+        print("Resetting env")
+        self.state = np.zeros((self.state_size))
         self.gen = combinations(range(self.num_agents),2)
         self.num_match = 0
+        self.last_acts = np.zeros((self.num_agents, self.num_agents),dtype=int)
+        self.turns_since_defect = np.zeros((self.num_agents), dtype=int)
+        self.agents_num_rounds = np.zeros((self.num_agents), dtype=int)
+        self.total_score = 0
+        self.agent_scores = np.zeros((self.num_agents), dtype=int)
+        self.num_defections = np.zeros((self.num_agents), dtype=int)
+        self.next_match = next(self.gen)
         return self._obs()
 
     def step(self, action_dict):
-        match_players = next(self.gen)
+        done = False
+        match_players = self.next_match
+        print(action_dict)
+        print("test print")
         a1_act = action_dict[match_players[0]]
         a2_act = action_dict[match_players[1]]
         self.num_match += 1
-        if self.num_match == self.num_agents:
+        self.last_acts[match_players[0]][match_players[1]] = a1_act
+        self.last_acts[match_players[1]][match_players[0]] = a2_act
+        self.turns_since_defect[match_players[0]] = (0 if a1_act == ACTIONS.DEFECT else self.turns_since_defect[match_players[0]] + 1)
+        self.turns_since_defect[match_players[1]] = (0 if a2_act == ACTIONS.DEFECT else self.turns_since_defect[match_players[1]] + 1)
+        self.num_defections[match_players[0]] += (1 if a1_act == ACTIONS.DEFECT else 0)
+        self.num_defections[match_players[1]] += (1 if a2_act == ACTIONS.DEFECT else 0)
+        self.agents_num_rounds[match_players[0]] += 1
+        self.agents_num_rounds[match_players[1]] += 1
+        if self.num_match == self.num_matches:
             done = True
+        else:
+            self.next_match = next(self.gen)
         rewards = {match_players[0] : self.get_reward(a1_act,a2_act), match_players[1]: self.get_reward(a2_act,a1_act)}
-        obs = self._obs()
+        self.agent_scores[match_players[0]] += rewards[match_players[0]]
+        self.agent_scores[match_players[1]] += rewards[match_players[1]]
+        self.total_score += rewards[match_players[0]] + rewards[match_players[1]]
+        obs = self._obs() if not done else {}
         dones = {"__all__": done}
         infos = {}
+        print("Finished Step", obs, rewards, dones, infos)
         return obs, rewards, dones, infos
 
     def _obs(self):
-        return {
-            agent_id : {"obs": self.agent_obs(agent_id)} for agent_id in range(self.NUM_AGENTS)
+        agent_id_0 = self.next_match[0]
+        agent_id_1 = self.next_match[1]
+        return_val = {
+            agent_id_0 : {"obs": self.agent_obs(agent_id_0,agent_id_1)},
+            agent_id_1 : {"obs": self.agent_obs(agent_id_1,agent_id_0)},
         }
+        print(return_val)
+        return return_val
 
-    def agent_obs(self, agent_id):
+    def agent_obs(self, agent_id, opp_id):
+        self.state[STATE_VARS.OPP_LAST_ACT] = self.last_acts[opp_id][agent_id]
+        self.state[STATE_VARS.OPP_ID] = opp_id
+        self.state[STATE_VARS.OPP_TURNS_SINCE_DEF] = self.turns_since_defect[opp_id]
+        self.state[STATE_VARS.NM_AGENTS] = self.num_agents
+        self.state[STATE_VARS.ENV_TOTAL_SCORE] = self.total_score
+        self.state[STATE_VARS.CURR_TOTAL_SCORE] = self.agent_scores[agent_id]
+        self.state[STATE_VARS.OPP_TOTAL_SCORE] = self.agent_scores[opp_id]
+        self.state[STATE_VARS.OPP_DEF_RATE] = 0 if self.agents_num_rounds[opp_id] == 0 else self.num_defections[opp_id] / self.agents_num_rounds[opp_id]
+        #self.state[STATE_VARS.AVG_AGENT_DEF_RATE] = np.average([self.num_defections[i] / self.agents_num_rounds[i] for i in self.num_agents])
+
         return self.state
+        
     def get_reward(self, agent_act, opponent_act):
         # There is a simpler way to implement this if defect and cooperate are 0 and 1,
         # But this method should stay accurate if we decide to change how we represent defect and cooperate

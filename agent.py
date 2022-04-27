@@ -1,6 +1,68 @@
 from statevars import STATE_VARS, ACTIONS
+from ray.rllib.policy.policy import Policy
 
 
+class CynicPolicy(Policy):
+    def __init__(self, observation_space, action_space, config):
+        Policy.__init__(self, observation_space, action_space, config)
+    def compute_actions(self,
+                        obs_batch,
+                        state_batches,
+                        prev_action_batch=None,
+                        prev_reward_batch=None,
+                        info_batch=None,
+                        episodes=None,
+                        **kwargs):
+        # return action batch, RNN states, extra values to include in batch
+        print("Cynic Step")
+        return [ACTIONS.DEFECT for _ in obs_batch], [], {}
+    def learn_on_batch(self, samples):
+        # implement your learning code here
+        return {}  # return stats
+    def get_weights(self):
+        pass
+    def set_weights(self, weights):
+        pass
+class EasyMarkPolicy(Policy):
+    def __init__(self, observation_space, action_space, config):
+        Policy.__init__(self, observation_space, action_space, config)
+    def compute_actions(self,
+                        obs_batch,
+                        state_batches,
+                        prev_action_batch=None,
+                        prev_reward_batch=None,
+                        info_batch=None,
+                        episodes=None,
+                        **kwargs):
+        # return action batch, RNN states, extra values to include in batch
+        return [ACTIONS.COOPERATE for _ in obs_batch], [], {}
+    def learn_on_batch(self, samples):
+        # implement your learning code here
+        return {}  # return stats
+    def get_weights(self):
+        pass
+    def set_weights(self, weights):
+            pass
+class TitForTat(Policy):
+    def __init__(self, observation_space, action_space, config):
+        Policy.__init__(self, observation_space, action_space, config)
+    def compute_actions(self,
+                        obs_batch,
+                        state_batches,
+                        prev_action_batch=None,
+                        prev_reward_batch=None,
+                        info_batch=None,
+                        episodes=None,
+                        **kwargs):
+        # return action batch, RNN states, extra values to include in batch
+        return [ACTIONS.COOPERATE for _ in obs_batch], [], {}
+    def learn_on_batch(self, samples):
+        # implement your learning code here
+        return {}  # return stats
+    def get_weights(self):
+        pass
+    def set_weights(self, weights):
+            pass
 class Agent():
     env = None
     def __init__(self, agent_id) -> None:
