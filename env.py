@@ -2,8 +2,71 @@ import agent
 from agent import *
 import numpy as np
 from statevars import STATE_VARS
+from ray.rllib.env.multi_agent_env import MultiAgentEnv, ENV_STATE
+from gym.spaces import Dict, Discrete, MultiDiscrete, Tuple, Box
+from itertools import combinations
+from math import comb
 
+class PDGame(MultiAgentEnv):
+    action_space = Discrete(2)
 
+    def __init__(self, env_config):
+        super().__init__()
+        self.action_space = Discrete(2)
+        self.state = None
+        self.num_agents = 3
+
+        self._agent_ids = {idx for idx in range(self.NUM_AGENTS)}
+        self.state_size = len(list(STATE_VARS))
+        self.observation_space = MultiDiscrete([2]*self.state_size)
+        self.iterations = 10
+        self.gen = combinations(range(self.num_agents),2)
+        self.num_matches = comb(self.num_agents,2)
+        self.num_match = 0
+
+    def seed(self, seed=None):
+        if seed:
+            np.random.seed(seed)
+
+    def reset(self):
+        self.state = np.zeros((self.num_agents,self.state_size))
+        self.gen = combinations(range(self.num_agents),2)
+        self.num_match = 0
+        return self._obs()
+
+    def step(self, action_dict):
+        match_players = next(self.gen)
+        a1_act = action_dict[match_players[0]]
+        a2_act = action_dict[match_players[1]]
+        self.num_match += 1
+        if self.num_match == self.num_agents:
+            done = True
+        rewards = {match_players[0] : self.get_reward(a1_act,a2_act), match_players[1]: self.get_reward(a2_act,a1_act)}
+        obs = self._obs()
+        dones = {"__all__": done}
+        infos = {}
+        return obs, rewards, dones, infos
+
+    def _obs(self):
+        return {
+            agent_id : {"obs": self.agent_obs(agent_id)} for agent_id in range(self.NUM_AGENTS)
+        }
+
+    def agent_obs(self, agent_id):
+        return self.state
+    def get_reward(self, agent_act, opponent_act):
+        # There is a simpler way to implement this if defect and cooperate are 0 and 1,
+        # But this method should stay accurate if we decide to change how we represent defect and cooperate
+        if agent_act == ACTIONS.DEFECT:
+            if opponent_act == ACTIONS.COOPERATE:
+                return 4
+            else:
+                return 1
+        else:
+            if opponent_act == ACTIONS.COOPERATE:
+                return 3
+            else:
+                return 0
 
 
 class Environment():
