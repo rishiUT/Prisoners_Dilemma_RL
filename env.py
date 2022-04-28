@@ -20,7 +20,8 @@ class PDGame(MultiAgentEnv):
 
         self._agent_ids = {idx for idx in range(self.num_agents)}
         self.state_size = len(list(STATE_VARS))
-        self.observation_space = Box(low=float(0), high=float(10), shape=(self.state_size,), dtype=np.float32)
+        self.observation_space = Box(low=float('-inf'), high=float('inf'), shape=(self.state_size,), dtype=np.float32)
+        # print("AAA ", self.observation_space)
         self.iterations = 10
         self.gen = combinations(range(self.num_agents),2)
         self.num_matches = len(list(combinations(range(self.num_agents),2)))
@@ -49,7 +50,7 @@ class PDGame(MultiAgentEnv):
         return ret
 
     def reset(self):
-        print("Resetting env")
+        # print("Resetting env")
         self.state = np.zeros((self.state_size))
         self.gen = combinations(range(self.num_agents),2)
         self.num_match = 0
@@ -66,7 +67,7 @@ class PDGame(MultiAgentEnv):
         done = False
         match_players = self.next_match
         print(action_dict)
-        print("test print")
+        # print("test print")
         a1_act = action_dict[match_players[0]]
         a2_act = action_dict[match_players[1]]
         self.num_match += 1
@@ -89,17 +90,17 @@ class PDGame(MultiAgentEnv):
         obs = self._obs() if not done else {}
         dones = {"__all__": done}
         infos = {}
-        print("Finished Step", obs, rewards, dones, infos)
+        # print("Finished Step", obs, rewards, dones, infos)
         return obs, rewards, dones, infos
 
     def _obs(self):
         agent_id_0 = self.next_match[0]
         agent_id_1 = self.next_match[1]
         return_val = {
-            agent_id_0 : {"obs": self.agent_obs(agent_id_0,agent_id_1)},
-            agent_id_1 : {"obs": self.agent_obs(agent_id_1,agent_id_0)},
+            agent_id_0 : self.agent_obs(agent_id_0,agent_id_1),
+            agent_id_1 : self.agent_obs(agent_id_1,agent_id_0),
         }
-        print(return_val)
+        # print(return_val)
         return return_val
 
     def agent_obs(self, agent_id, opp_id):
@@ -113,7 +114,7 @@ class PDGame(MultiAgentEnv):
         self.state[STATE_VARS.OPP_DEF_RATE] = 0 if self.agents_num_rounds[opp_id] == 0 else self.num_defections[opp_id] / self.agents_num_rounds[opp_id]
         #self.state[STATE_VARS.AVG_AGENT_DEF_RATE] = np.average([self.num_defections[i] / self.agents_num_rounds[i] for i in self.num_agents])
 
-        return self.state
+        return np.copy(self.state)
         
     def get_reward(self, agent_act, opponent_act):
         # There is a simpler way to implement this if defect and cooperate are 0 and 1,

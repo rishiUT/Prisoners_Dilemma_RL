@@ -14,7 +14,7 @@ class CynicPolicy(Policy):
                         episodes=None,
                         **kwargs):
         # return action batch, RNN states, extra values to include in batch
-        print("Cynic Step")
+        # print("Cynic Step")
         return [ACTIONS.DEFECT for _ in obs_batch], [], {}
     def learn_on_batch(self, samples):
         # implement your learning code here

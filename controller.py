@@ -7,11 +7,11 @@ import argparse
 from ray import tune
 import random
 from ray.tune.registry import register_env
+from ray.rllib.policy.policy import PolicySpec
 env_name = "PDGame"
 register_env(env_name,lambda env_config: PDGame)
 
-def select_policy(agent_id):
-    print(f"selecting agent {agent_id}")
+def select_policy(agent_id,episode,worker,**kwargs):
     if agent_id == 0:
         return "cynic"
 
@@ -52,22 +52,24 @@ if __name__ == "__main__":
     config={"env": PDGame,
                      #"eager": True,
                      "gamma": 0.9,
-                     "disable_env_checking": False,
+                     "disable_env_checking": True,
+                     "ignore_worker_failures": False,
                      "num_workers": 1,
                      "framework": "torch",
                      "num_envs_per_worker": 1,
-                     "train_batch_size": 128,
+                     "train_batch_size": 1,
+                     "sgd_minibatch_size": 1,
                      #"multiagent": {"policies_to_train": ["learned"],
                      "multiagent": {"policies_to_train": [],
-                                    "policies": {"cynic": (CynicPolicy, PDGame.observation_space, PDGame.action_space, {}),
+                                    "policies": {"cynic": PolicySpec(policy_class=CynicPolicy),
                                                  #"beat_last": (BeatLastHeuristic, Discrete(3), Discrete(3), {}),
-                                                 "easy_mark": (EasyMarkPolicy, PDGame.observation_space, PDGame.action_space, {}),
+                                                 "easy_mark": PolicySpec(policy_class=EasyMarkPolicy),
                                                  },
                                     "policy_mapping_fn": select_policy,
                                    }
                     }
     print("RUNNING")
-    tune.run("PPO", config=config)
+    tune.run("PPO", config=config,stop={"training_iteration": 10})
     print("FINISHED")
 
 
