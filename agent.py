@@ -43,7 +43,7 @@ class EasyMarkPolicy(Policy):
         pass
     def set_weights(self, weights):
             pass
-class TitForTat(Policy):
+class TitForTatPolicy(Policy):
     def __init__(self, observation_space, action_space, config):
         Policy.__init__(self, observation_space, action_space, config)
     def compute_actions(self,
@@ -55,7 +55,7 @@ class TitForTat(Policy):
                         episodes=None,
                         **kwargs):
         # return action batch, RNN states, extra values to include in batch
-        return [ACTIONS.COOPERATE for _ in obs_batch], [], {}
+        return [ACTIONS.COOPERATE if int(obs[STATE_VARS.OPP_LAST_ACT]) == int(ACTIONS.COOPERATE) else ACTIONS.DEFECT for obs in obs_batch ], [], {}
     def learn_on_batch(self, samples):
         # implement your learning code here
         return {}  # return stats
