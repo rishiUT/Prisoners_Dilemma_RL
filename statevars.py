@@ -10,6 +10,8 @@ class STATE_VARS(IntEnum):
     ENV_TOTAL_SCORE = auto()
     NM_AGENTS = auto()
     AVG_AGENT_DEF_RATE = auto()
+    CURR_NUM_ROUNDS = auto()
+    OPP_NUM_ROUNDS = auto()
     
 class ACTIONS(IntEnum):
     COOPERATE = 0

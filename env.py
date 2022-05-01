@@ -1,5 +1,7 @@
 from argparse import Action
 import os
+
+from torch import randint
 os.environ['KMP_DUPLICATE_LIB_OK']='True'
 import agent
 from agent import *
@@ -8,6 +10,7 @@ from statevars import STATE_VARS, ACTIONS
 from ray.rllib.env.multi_agent_env import MultiAgentEnv, ENV_STATE
 from gym.spaces import Dict, Discrete, MultiDiscrete, Tuple, Box
 from itertools import combinations
+import random
 
 class PDGame(MultiAgentEnv):
     action_space = Discrete(2)
@@ -16,13 +19,14 @@ class PDGame(MultiAgentEnv):
         super().__init__()
         self.action_space = Discrete(2)
         self.state = None
-        self.num_agents = 3
+        self.num_agents = 2
+        self.rounds = random.randint(2, 10)
 
         self._agent_ids = {idx for idx in range(self.num_agents)}
         self.state_size = len(list(STATE_VARS))
         self.observation_space = Box(low=float('-inf'), high=float('inf'), shape=(self.state_size,), dtype=np.float32)
         # print("AAA ", self.observation_space)
-        self.iterations = 10
+        
         self.gen = combinations(range(self.num_agents),2)
         self.num_matches = len(list(combinations(range(self.num_agents),2)))
         self.next_match = next(self.gen)
@@ -34,6 +38,7 @@ class PDGame(MultiAgentEnv):
         self.agent_scores = np.zeros((self.num_agents), dtype=int)
         self.num_defections = np.zeros((self.num_agents), dtype=int)
         self.state = np.zeros((self.state_size))
+        self.curr_round = 0
 
     def seed(self, seed=None):
         if seed:
@@ -61,10 +66,13 @@ class PDGame(MultiAgentEnv):
         self.agent_scores = np.zeros((self.num_agents), dtype=int)
         self.num_defections = np.zeros((self.num_agents), dtype=int)
         self.next_match = next(self.gen)
+        self.curr_round = 0
+        print("Env Reset")
         return self._obs()
 
     def step(self, action_dict):
         done = False
+        self.curr_round += 1
         match_players = self.next_match
         print(action_dict)
         # print("test print")
@@ -79,8 +87,14 @@ class PDGame(MultiAgentEnv):
         self.num_defections[match_players[1]] += (1 if a2_act == ACTIONS.DEFECT else 0)
         self.agents_num_rounds[match_players[0]] += 1
         self.agents_num_rounds[match_players[1]] += 1
+
         if self.num_match == self.num_matches:
-            done = True
+            if self.curr_round < self.rounds:
+                self.num_match = 0
+                self.gen = combinations(range(self.num_agents),2)
+            else:
+                print(f"Defect Ratio: {0 if self.agents_num_rounds[match_players[0]] == 0 else self.num_defections[match_players[0]] / self.agents_num_rounds[match_players[0]]}")
+                done = True
         else:
             self.next_match = next(self.gen)
         rewards = {match_players[0] : self.get_reward(a1_act,a2_act), match_players[1]: self.get_reward(a2_act,a1_act)}
@@ -112,6 +126,8 @@ class PDGame(MultiAgentEnv):
         self.state[STATE_VARS.CURR_TOTAL_SCORE] = self.agent_scores[agent_id]
         self.state[STATE_VARS.OPP_TOTAL_SCORE] = self.agent_scores[opp_id]
         self.state[STATE_VARS.OPP_DEF_RATE] = 0 if self.agents_num_rounds[opp_id] == 0 else self.num_defections[opp_id] / self.agents_num_rounds[opp_id]
+        self.state[STATE_VARS.CURR_NUM_ROUNDS] = self.agents_num_rounds[agent_id]
+        self.state[STATE_VARS.OPP_NUM_ROUNDS] = self.agents_num_rounds[opp_id]
         #self.state[STATE_VARS.AVG_AGENT_DEF_RATE] = np.average([self.num_defections[i] / self.agents_num_rounds[i] for i in self.num_agents])
 
         return np.copy(self.state)
@@ -119,16 +135,19 @@ class PDGame(MultiAgentEnv):
     def get_reward(self, agent_act, opponent_act):
         # There is a simpler way to implement this if defect and cooperate are 0 and 1,
         # But this method should stay accurate if we decide to change how we represent defect and cooperate
+        ind_reward = 0
+        avg_total_reward = self.total_score / (self.curr_round * self.rounds + self.num_match)
         if agent_act == ACTIONS.DEFECT:
             if opponent_act == ACTIONS.COOPERATE:
-                return 4
+                ind_reward = 4
             else:
-                return 1
+                ind_reward = 1
         else:
             if opponent_act == ACTIONS.COOPERATE:
-                return 3
+                ind_reward = 3
             else:
-                return 0
+                ind_reward = 0
+        return ind_reward + avg_total_reward
 
 
 class Environment():

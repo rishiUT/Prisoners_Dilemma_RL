@@ -5,6 +5,8 @@ from env import Environment, PDGame
 from agent import *
 import argparse
 from ray import tune
+import ray
+
 import random
 from ray.tune.registry import register_env
 from ray.rllib.policy.policy import PolicySpec
@@ -16,6 +18,7 @@ register_env(env_name,lambda env_config: PDGame)
 policies = {"cynic": PolicySpec(policy_class=CynicPolicy),
             #"beat_last": (BeatLastHeuristic, Discrete(3), Discrete(3), {}),
             "easy_mark": PolicySpec(policy_class=EasyMarkPolicy),
+            "tft": PolicySpec(policy_class=TitForTatPolicy),
             "sac": PolicySpec(policy_class=SACTorchPolicy),
             "ppo": PolicySpec(policy_class=PPOTorchPolicy)
             }
@@ -24,8 +27,11 @@ def select_policy(agent_id,episode,worker,**kwargs):
         return "ppo"
 
     elif agent_id == 1:
-        return "cynic"
+        return "sac"
 
+    elif agent_id == 2:
+        return "sac"
+        
     else:
         return random.choice(["cynic", "cynic"])
 if __name__ == "__main__":
@@ -44,7 +50,7 @@ if __name__ == "__main__":
         "be achieved within --stop-timesteps AND --stop-iters.",
     )
     parser.add_argument(
-        "--stop-iters", type=int, default=3, help="Number of iterations to train."
+        "--stop-iters", type=int, default=20, help="Number of iterations to train."
     )
     parser.add_argument(
         "--stop-timesteps", type=int, default=100000, help="Number of timesteps to train."
@@ -73,6 +79,7 @@ if __name__ == "__main__":
                                     "policy_mapping_fn": select_policy,
                                    }
                     }
+    ray.init(log_to_driver=True)
     ppo_trainer = PPOTrainer(
         env=PDGame,
         config={
@@ -119,14 +126,14 @@ if __name__ == "__main__":
         print("== Iteration", i, "==")
 
         # improve the DQN policy
-        print("-- SAC --")
+        # print("-- SAC --")
         result_sac = sac_trainer.train()
-        print(result_sac)
+        # print(result_sac)
 
         # improve the PPO policy
-        print("-- PPO --")
+        # print("-- PPO --")
         result_ppo = ppo_trainer.train()
-        print(result_ppo)
+        # print(result_ppo)
 
         # Test passed gracefully.
         if (
@@ -139,7 +146,10 @@ if __name__ == "__main__":
 
         # swap weights to synchronize
         sac_trainer.set_weights(ppo_trainer.get_weights(["ppo_policy"]))
-        ppo_trainer.set_weights(sac_trainer.get_weights(["dqn_policy"]))
+        ppo_trainer.set_weights(sac_trainer.get_weights(["sac_policy"]))
+
+        print(f"Per episode sac reward: {result_sac['episode_reward_mean']}")
+        print(f"Per episode ppo reward: {result_ppo['episode_reward_mean']}")
     print("FINISHED")
 
 

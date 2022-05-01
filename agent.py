@@ -15,7 +15,10 @@ class CynicPolicy(Policy):
                         **kwargs):
         # return action batch, RNN states, extra values to include in batch
         # print("Cynic Step")
-        return [ACTIONS.DEFECT for _ in obs_batch], [], {}
+        # # print(f"batch_size: {len(obs_batch)}")
+        ret_action = [ACTIONS.DEFECT for _ in obs_batch]
+        # print(f"Cynic Action: {ret_action[0]}")
+        return ret_action, [], {}
     def learn_on_batch(self, samples):
         # implement your learning code here
         return {}  # return stats
@@ -23,6 +26,7 @@ class CynicPolicy(Policy):
         pass
     def set_weights(self, weights):
         pass
+
 class EasyMarkPolicy(Policy):
     def __init__(self, observation_space, action_space, config):
         Policy.__init__(self, observation_space, action_space, config)
@@ -42,7 +46,8 @@ class EasyMarkPolicy(Policy):
     def get_weights(self):
         pass
     def set_weights(self, weights):
-            pass
+        pass
+
 class TitForTatPolicy(Policy):
     def __init__(self, observation_space, action_space, config):
         Policy.__init__(self, observation_space, action_space, config)
@@ -62,7 +67,8 @@ class TitForTatPolicy(Policy):
     def get_weights(self):
         pass
     def set_weights(self, weights):
-            pass
+        pass
+    
 class Agent():
     env = None
     def __init__(self, agent_id) -> None:
