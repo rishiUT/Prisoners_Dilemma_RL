@@ -19,7 +19,7 @@ class PDGame(MultiAgentEnv):
         super().__init__()
         self.action_space = Discrete(2)
         self.state = None
-        self.num_agents = 2
+        self.num_agents = 4
         self.rounds = random.randint(2, 10)
 
         self._agent_ids = {idx for idx in range(self.num_agents)}
@@ -39,6 +39,7 @@ class PDGame(MultiAgentEnv):
         self.num_defections = np.zeros((self.num_agents), dtype=int)
         self.state = np.zeros((self.state_size))
         self.curr_round = 0
+        self.num_resets = 0
 
     def seed(self, seed=None):
         if seed:
@@ -67,15 +68,39 @@ class PDGame(MultiAgentEnv):
         self.num_defections = np.zeros((self.num_agents), dtype=int)
         self.next_match = next(self.gen)
         self.curr_round = 0
+        self.rounds = random.randint(2, 10)
         print("Env Reset")
+        self.num_resets += 1
         return self._obs()
+
+    def print_to_csv(self, action_dict):
+        to_print = [self.num_resets,]
+        for i in range(self.num_agents):
+            if i in action_dict.keys():
+                to_print.append(action_dict[i])
+            else:
+                to_print.append('-')
+
+        from csv import writer
+        with open('test.csv', 'a', newline='') as f_object:  
+            # Pass the CSV  file object to the writer() function
+            writer_object = writer(f_object)
+            # Result - a writer object
+            # Pass the data in the list as an argument into the writerow() function
+            writer_object.writerow(to_print)  
+            # Close the file object
+            f_object.close()
+
 
     def step(self, action_dict):
         done = False
         self.curr_round += 1
         match_players = self.next_match
-        print(action_dict)
-        # print("test print")
+        if 0 in action_dict.keys() and 1 in action_dict.keys():
+            print(action_dict)
+
+        self.print_to_csv(action_dict)
+
         a1_act = action_dict[match_players[0]]
         a2_act = action_dict[match_players[1]]
         self.num_match += 1
@@ -97,7 +122,8 @@ class PDGame(MultiAgentEnv):
                 done = True
         else:
             self.next_match = next(self.gen)
-        rewards = {match_players[0] : self.get_reward(a1_act,a2_act), match_players[1]: self.get_reward(a2_act,a1_act)}
+        # rewards = {match_players[0] : self.get_reward(a1_act,a2_act), match_players[1]: self.get_reward(a2_act,a1_act)}
+        rewards = {match_players[0] : self.get_team_reward(a1_act,a2_act,match_players[0],match_players[1]), match_players[1]: self.get_team_reward(a2_act,a1_act,match_players[1],match_players[0])}
         self.agent_scores[match_players[0]] += rewards[match_players[0]]
         self.agent_scores[match_players[1]] += rewards[match_players[1]]
         self.total_score += rewards[match_players[0]] + rewards[match_players[1]]
@@ -136,7 +162,7 @@ class PDGame(MultiAgentEnv):
         # There is a simpler way to implement this if defect and cooperate are 0 and 1,
         # But this method should stay accurate if we decide to change how we represent defect and cooperate
         ind_reward = 0
-        avg_total_reward = self.total_score / (self.curr_round * self.rounds + self.num_match)
+        avg_total_reward = 0 # self.total_score / (self.curr_round * self.rounds + self.num_match)
         if agent_act == ACTIONS.DEFECT:
             if opponent_act == ACTIONS.COOPERATE:
                 ind_reward = 4
@@ -147,7 +173,27 @@ class PDGame(MultiAgentEnv):
                 ind_reward = 3
             else:
                 ind_reward = 0
-        return ind_reward + avg_total_reward
+        return self.total_score #ind_reward + avg_total_reward
+    def get_team_reward(self, agent_act, opponent_act, agent_id, opp_id):
+        # There is a simpler way to implement this if defect and cooperate are 0 and 1,
+        # But this method should stay accurate if we decide to change how we represent defect and cooperate
+        t1 = agent_id % 2
+        t2 = opp_id % 2
+        ind_reward = 0
+        team_reward =  100 if t1 == t2 else -100 
+        # self.total_score / (self.curr_round * self.rounds + self.num_match)
+        if agent_act == ACTIONS.DEFECT:
+            team_reward *= -1
+            if opponent_act == ACTIONS.COOPERATE:
+                ind_reward = 4
+            else:
+                ind_reward = 1
+        else:
+            if opponent_act == ACTIONS.COOPERATE:
+                ind_reward = 3
+            else:
+                ind_reward = 0
+        return ind_reward + team_reward
 
 
 class Environment():
