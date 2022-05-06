@@ -6,7 +6,7 @@ os.environ['KMP_DUPLICATE_LIB_OK']='True'
 import agent
 from agent import *
 import numpy as np
-from statevars import STATE_VARS, ACTIONS
+from statevars import STATE_VARS, ACTIONS, REWARD
 from ray.rllib.env.multi_agent_env import MultiAgentEnv, ENV_STATE
 from gym.spaces import Dict, Discrete, MultiDiscrete, Tuple, Box
 from itertools import combinations
@@ -14,12 +14,12 @@ import random
 
 class PDGame(MultiAgentEnv):
     action_space = Discrete(2)
-
     def __init__(self, env_config):
         super().__init__()
         self.action_space = Discrete(2)
         self.state = None
-        self.num_agents = 4
+        self.num_agents = 2
+        self.reward_type = REWARD.REGULAR
         self.rounds = random.randint(2, 10)
 
         self._agent_ids = {idx for idx in range(self.num_agents)}
@@ -32,6 +32,7 @@ class PDGame(MultiAgentEnv):
         self.next_match = next(self.gen)
         self.num_match = 0
         self.last_acts = np.zeros((self.num_agents, self.num_agents),dtype=int)
+        self.last_act_overall = np.zeros((self.num_agents,),dtype=int)
         self.turns_since_defect = np.zeros((self.num_agents), dtype=int)
         self.agents_num_rounds = np.zeros((self.num_agents), dtype=int)
         self.total_score = 0
@@ -80,6 +81,8 @@ class PDGame(MultiAgentEnv):
                 to_print.append(action_dict[i])
             else:
                 to_print.append('-')
+        
+        # to_print.append(self.last_acts[action_dict.keys()[1]][action_dict.keys()[0]])
 
         from csv import writer
         with open('test.csv', 'a', newline='') as f_object:  
@@ -106,6 +109,8 @@ class PDGame(MultiAgentEnv):
         self.num_match += 1
         self.last_acts[match_players[0]][match_players[1]] = a1_act
         self.last_acts[match_players[1]][match_players[0]] = a2_act
+        self.last_act_overall[match_players[0]] = a1_act
+        self.last_act_overall[match_players[1]] = a2_act
         self.turns_since_defect[match_players[0]] = (0 if a1_act == ACTIONS.DEFECT else self.turns_since_defect[match_players[0]] + 1)
         self.turns_since_defect[match_players[1]] = (0 if a2_act == ACTIONS.DEFECT else self.turns_since_defect[match_players[1]] + 1)
         self.num_defections[match_players[0]] += (1 if a1_act == ACTIONS.DEFECT else 0)
@@ -123,7 +128,7 @@ class PDGame(MultiAgentEnv):
         else:
             self.next_match = next(self.gen)
         # rewards = {match_players[0] : self.get_reward(a1_act,a2_act), match_players[1]: self.get_reward(a2_act,a1_act)}
-        rewards = {match_players[0] : self.get_team_reward(a1_act,a2_act,match_players[0],match_players[1]), match_players[1]: self.get_team_reward(a2_act,a1_act,match_players[1],match_players[0])}
+        rewards = {match_players[0] : self.get_reward(a1_act,a2_act,match_players[0],match_players[1]), match_players[1]: self.get_reward(a2_act,a1_act,match_players[1],match_players[0])}
         self.agent_scores[match_players[0]] += rewards[match_players[0]]
         self.agent_scores[match_players[1]] += rewards[match_players[1]]
         self.total_score += rewards[match_players[0]] + rewards[match_players[1]]
@@ -152,17 +157,28 @@ class PDGame(MultiAgentEnv):
         self.state[STATE_VARS.CURR_TOTAL_SCORE] = self.agent_scores[agent_id]
         self.state[STATE_VARS.OPP_TOTAL_SCORE] = self.agent_scores[opp_id]
         self.state[STATE_VARS.OPP_DEF_RATE] = 0 if self.agents_num_rounds[opp_id] == 0 else self.num_defections[opp_id] / self.agents_num_rounds[opp_id]
-        self.state[STATE_VARS.CURR_NUM_ROUNDS] = self.agents_num_rounds[agent_id]
-        self.state[STATE_VARS.OPP_NUM_ROUNDS] = self.agents_num_rounds[opp_id]
+        self.state[STATE_VARS.SELF_TEAM] = agent_id % 2
+        self.state[STATE_VARS.OPP_TEAM] = opp_id % 2
+        self.state[STATE_VARS.OPP_LAST_ACT_OVERALL] = self.last_act_overall[opp_id]
         #self.state[STATE_VARS.AVG_AGENT_DEF_RATE] = np.average([self.num_defections[i] / self.agents_num_rounds[i] for i in self.num_agents])
 
         return np.copy(self.state)
         
-    def get_reward(self, agent_act, opponent_act):
+    def get_reward(self, agent_act, opponent_act, agent_id, opp_id):
         # There is a simpler way to implement this if defect and cooperate are 0 and 1,
         # But this method should stay accurate if we decide to change how we represent defect and cooperate
+        extra_reward = 0
         ind_reward = 0
-        avg_total_reward = 0 # self.total_score / (self.curr_round * self.rounds + self.num_match)
+        # avg_total_reward = 0 # self.total_score / (self.curr_round * self.rounds + self.num_match)
+        
+        if self.reward_type == REWARD.COMMUNISM:
+            return self.get_default_reward(agent_act, opponent_act, agent_id, opp_id) + self.get_default_reward(opponent_act, agent_act, opp_id, agent_id)
+        elif self.reward_type == REWARD.TEAM:
+            return self.get_team_reward(self, agent_act, opponent_act, agent_id, opp_id)
+        elif self.reward_type == REWARD.SOCIALISM:
+            extra_reward = self.get_default_reward(agent_act, opponent_act, agent_id, opp_id) + self.get_default_reward(opponent_act, agent_act, opp_id, agent_id)
+
+        # DEFAULT PD Reward
         if agent_act == ACTIONS.DEFECT:
             if opponent_act == ACTIONS.COOPERATE:
                 ind_reward = 4
@@ -173,7 +189,24 @@ class PDGame(MultiAgentEnv):
                 ind_reward = 3
             else:
                 ind_reward = 0
-        return self.total_score #ind_reward + avg_total_reward
+        return extra_reward + ind_reward #ind_reward + avg_total_reward
+    def get_default_reward(self, agent_act, opponent_act, agent_id, opp_id):
+        # There is a simpler way to implement this if defect and cooperate are 0 and 1,
+        # But this method should stay accurate if we decide to change how we represent defect and cooperate
+
+        # DEFAULT PD Reward
+        if agent_act == ACTIONS.DEFECT:
+            if opponent_act == ACTIONS.COOPERATE:
+                ind_reward = 4
+            else:
+                ind_reward = 1
+        else:
+            if opponent_act == ACTIONS.COOPERATE:
+                ind_reward = 3
+            else:
+                ind_reward = 0
+        return ind_reward #ind_reward + avg_total_reward
+
     def get_team_reward(self, agent_act, opponent_act, agent_id, opp_id):
         # There is a simpler way to implement this if defect and cooperate are 0 and 1,
         # But this method should stay accurate if we decide to change how we represent defect and cooperate
@@ -195,63 +228,3 @@ class PDGame(MultiAgentEnv):
                 ind_reward = 0
         return ind_reward + team_reward
 
-
-class Environment():
-    def __init__(self,agents) -> None:
-        state_size = len(list(STATE_VARS))
-        
-        
-        self.agents = agents
-        if not self.agents:
-            self.agents.append(Cynic(state_size,0))
-            self.agents.append(EasyMark(state_size,1))
-            self.agents.append(TitForTat(state_size,2))
-        print(f"Agents: {self.agents}")
-        self.total_reward = 0
-        num_agents = len(agents)
-        self.last_acts = np.zeros((num_agents, num_agents),dtype=int)
-        self.state = np.zeros((num_agents,state_size))
-
-
-
-    def run_sim(self) -> None:
-        for i in range(10):
-            for agent_idx, agent in enumerate(self.agents):
-                for opp_idx, opponent in enumerate(self.agents):
-                    if opponent is not agent:
-                        print(f"Agent {agent_idx}:")
-                        agent_action = agent.act(self.get_state(agent, opponent))
-                        print(f"Opp {opp_idx}:")
-                        opp_action = opponent.act(self.get_state(opponent, agent))
-                        agent_reward = self.get_reward(agent_action, opp_action)
-                        opp_reward = self.get_reward(opp_action, agent_action)
-                        print(f"Agent {agent_idx}:")
-                        agent.get_reward(agent_reward)
-                        print(f"Opp {opp_idx}:")
-                        opponent.get_reward(opp_reward)
-                        self.total_reward += agent_reward + opp_reward
-                        self.last_acts[agent_idx][opp_idx] = agent_action
-                        self.last_acts[opp_idx][agent_idx] = opp_action
-                total_rewards = [agent.reward_total for agent in self.agents]
-                total_rewards_arr = np.array(total_rewards)
-                best_agent_idx = np.argmax(total_rewards_arr)
-                print(f"Agent {best_agent_idx}/ {str(self.agents[best_agent_idx])} wins")
-
-    def get_state(self, agent, opponent):
-        #This is incomplete, once we have state variables we can determine how they're determined
-        self.state[agent.id,STATE_VARS.OPP_LAST_ACT] = self.last_acts[opponent.id][agent.id]
-        return self.state[agent.id]
-
-    def get_reward(self, agent_act, opponent_act):
-        # There is a simpler way to implement this if defect and cooperate are 0 and 1,
-        # But this method should stay accurate if we decide to change how we represent defect and cooperate
-        if agent_act == ACTIONS.DEFECT:
-            if opponent_act == ACTIONS.COOPERATE:
-                return 4
-            else:
-                return 1
-        else:
-            if opponent_act == ACTIONS.COOPERATE:
-                return 3
-            else:
-                return 0

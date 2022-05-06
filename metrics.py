@@ -131,6 +131,7 @@ class MyCallbacks(DefaultCallbacks):
         # print("postprocessed {} steps".format(postprocessed_batch.count))
         # print("Batches ", original_batches[agent_id][1]['actions'])
         agent_actions = original_batches[agent_id][1]['actions']
+        # print(f"Agent {agent_id}: {agent_actions}")
         if f"agent_{agent_id}_num_actions" not in episode.custom_metrics:
             episode.custom_metrics[f"agent_{agent_id}_num_actions"] = 0
             episode.custom_metrics[f"agent_{agent_id}_num_defect"] = 0

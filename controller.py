@@ -1,8 +1,9 @@
 import os
 os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 
-from env import Environment, PDGame
+from env import  PDGame
 from agent import *
+from metrics import MyCallbacks
 import argparse
 from ray import tune
 import ray
@@ -26,10 +27,10 @@ policies = {"cynic": PolicySpec(policy_class=CynicPolicy),
             }
 def select_policy(agent_id,episode,worker,**kwargs):
     if agent_id == 0:
-        return "dqn"
+        return "ppo"
 
     elif agent_id == 1:
-        return "ppo"
+        return "tft"
 
     elif agent_id == 2:
         return "tft"
@@ -41,6 +42,17 @@ def select_policy(agent_id,episode,worker,**kwargs):
         return random.choice(["cynic", "cynic"])
 if __name__ == "__main__":
     
+    from csv import writer
+    to_print = ["EPISODES", "PPO", "TFT"]
+    with open('test.csv', 'w', newline='') as f_object:  
+            # Pass the CSV  file object to the writer() function
+            writer_object = writer(f_object)
+            # Result - a writer object
+            # Pass the data in the list as an argument into the writerow() function
+            writer_object.writerow(to_print)  
+            # Close the file object
+            f_object.close()
+
     parser = argparse.ArgumentParser()
     parser.add_argument(
     "--framework",
@@ -68,22 +80,7 @@ if __name__ == "__main__":
     )
     parser.add_argument('-agents', '--agents', nargs='+', default=[])
     args = parser.parse_args()
-    config={"env": PDGame,
-                     #"eager": True,
-                     "gamma": 0.9,
-                     "disable_env_checking": True,
-                     "ignore_worker_failures": False,
-                     "num_workers": 1,
-                     "framework": "torch",
-                     "num_envs_per_worker": 1,
-                     "train_batch_size": 1,
-                     "sgd_minibatch_size": 1,
-                     #"multiagent": {"policies_to_train": ["learned"],
-                     "multiagent": {"policies_to_train": ["ppo","sac"],
-                                    "policies": policies,
-                                    "policy_mapping_fn": select_policy,
-                                   }
-                    }
+
     ray.init(log_to_driver=True)
     ppo_trainer = PPOTrainer(
         env=PDGame,
@@ -97,7 +94,12 @@ if __name__ == "__main__":
                 "vf_share_layers": True,
             },
             "num_sgd_iter": 6,
+            "callbacks": MyCallbacks,
             "vf_loss_coeff": 0.01,
+            # "train_batch_size": 1,
+            
+            # "rollout_fragment_length": 1,
+            # "sgd_minibatch_size": 1,
             # disable filters, otherwise we would need to synchronize those
             # as well to the DQN agent
             "observation_filter": "MeanStdFilter",
@@ -121,6 +123,9 @@ if __name__ == "__main__":
                 "vf_share_layers": True,
             },
             "gamma": 0.95,
+            "callbacks": MyCallbacks,
+            # "train_batch_size": 1,
+            # "sgd_minibatch_size": 1,
             # "n_step": 3,
             # Use GPUs iff `RLLIB_NUM_GPUS` env var set to > 0.
             "num_gpus": int(os.environ.get("RLLIB_NUM_GPUS", "0")),
@@ -141,6 +146,10 @@ if __name__ == "__main__":
             },
             "gamma": 0.95,
             "n_step": 3,
+            # "train_batch_size": 1,
+            # "rollout_fragment_length": 1,
+            # "sgd_minibatch_size": 1,
+            "callbacks": MyCallbacks,
             # Use GPUs iff `RLLIB_NUM_GPUS` env var set to > 0.
             "num_gpus": int(os.environ.get("RLLIB_NUM_GPUS", "0")),
             "framework": args.framework,
@@ -154,7 +163,7 @@ if __name__ == "__main__":
         # improve the DQN policy
         # print("-- SAC --")
         # result_sac = sac_trainer.train()
-        result_dqn = dqn_trainer.train()
+        # result_dqn = dqn_trainer.train()
         # print(result_dqn)
 
         # improve the PPO policy
@@ -166,7 +175,7 @@ if __name__ == "__main__":
         if (
             args.as_test
             # and result_sac["episode_reward_mean"] > args.stop_reward
-            and result_dqn["episode_reward_mean"] > args.stop_reward
+            # and result_dqn["episode_reward_mean"] > args.stop_reward
             and result_ppo["episode_reward_mean"] > args.stop_reward
         ):
             print("test passed (both agents above requested reward)")
@@ -179,21 +188,8 @@ if __name__ == "__main__":
         # dqn_trainer.set_weights(ppo_trainer.get_weights(result_ppo["ppo_policy"]))
         # print(f"Per episode sac reward: {result_sac['episode_reward_mean']}")
         print(f"Per episode ppo reward: {result_ppo['episode_reward_mean']}")
-        print(f"Per episode dqn reward: {result_dqn['episode_reward_mean']}")
-    # ppo_trainer.save("ppo_ck")
-    dqn_trainer.save("dqn_ck")
+        # print(f"Per episode dqn reward: {result_dqn['episode_reward_mean']}")
+    ppo_trainer.save("ppo_ck")
+    #dqn_trainer.save("dqn_ck")
     print("FINISHED")
 
-
-# if __name__ == "__main__":
-    
-#     parser = argparse.ArgumentParser()
-#     parser.add_argument('-agents', '--agents', nargs='+', default=[])
-#     args = parser.parse_args()
-#     agents = []
-#     for idx,agent in enumerate(args.agents):
-#         agents.append(globals()[args.a1](1,idx))
-#         agents.append(globals()[args.a2](1,idx))
-#     env = Environment(agents)
-#     Agent.env = env
-#     env.run_sim()

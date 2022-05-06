@@ -12,7 +12,17 @@ class STATE_VARS(IntEnum):
     AVG_AGENT_DEF_RATE = auto()
     CURR_NUM_ROUNDS = auto()
     OPP_NUM_ROUNDS = auto()
+    SELF_TEAM = auto()
+    OPP_TEAM = auto()
+    OPP_LAST_ACT_OVERALL = auto()
     
 class ACTIONS(IntEnum):
     COOPERATE = 0
     DEFECT = 1
+
+
+class REWARD(IntEnum):
+    REGULAR = auto()
+    COMMUNISM = auto()
+    SOCIALISM = auto()
+    TEAM = auto()
