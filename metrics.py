@@ -167,7 +167,7 @@ if __name__ == "__main__":
 
     # Verify episode-related custom metrics are there.
     custom_metrics = trials[0].last_result["custom_metrics"]
-    print(custom_metrics)
+    #print(custom_metrics)
     assert "pole_angle_mean" in custom_metrics
     assert "pole_angle_min" in custom_metrics
     assert "pole_angle_max" in custom_metrics
@@ -177,5 +177,5 @@ if __name__ == "__main__":
     # Verify `on_learn_on_batch` custom metrics are there (per policy).
     if args.framework == "torch":
         info_custom_metrics = custom_metrics["default_policy"]
-        print(info_custom_metrics)
+        #print(info_custom_metrics)
         assert "sum_actions_in_train_batch" in info_custom_metrics

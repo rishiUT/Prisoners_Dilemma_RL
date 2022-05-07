@@ -1,4 +1,7 @@
 import os
+from pickle import FALSE, TRUE
+
+from sqlalchemy import true
 os.environ["KMP_DUPLICATE_LIB_OK"]="TRUE"
 
 from env import  PDGame
@@ -8,12 +11,22 @@ import argparse
 from ray import tune
 import ray
 
+#tft socialism ppo
+#cynic socialism ppo
+#cynic socialism dqn
+#tft socialism dqn
+
 import random
 from ray.tune.registry import register_env
 from ray.rllib.policy.policy import PolicySpec
 from ray.rllib.agents.sac import SACTrainer, SACTorchPolicy
 from ray.rllib.agents.ppo import PPOTrainer, PPOTorchPolicy
 from ray.rllib.agents.dqn import DQNTrainer, DQNTorchPolicy
+
+trainSAC = FALSE
+trainPPO = TRUE
+trainDQN = TRUE
+
 
 env_name = "PDGame"
 register_env(env_name,lambda env_config: PDGame)
@@ -27,10 +40,10 @@ policies = {"cynic": PolicySpec(policy_class=CynicPolicy),
             }
 def select_policy(agent_id,episode,worker,**kwargs):
     if agent_id == 0:
-        return "ppo"
+        return "dqn"
 
     elif agent_id == 1:
-        return "tft"
+        return "ppo"
 
     elif agent_id == 2:
         return "tft"
@@ -43,7 +56,7 @@ def select_policy(agent_id,episode,worker,**kwargs):
 if __name__ == "__main__":
     
     from csv import writer
-    to_print = ["EPISODES", "PPO", "TFT"]
+    to_print = ["EPISODES", "DQN", "PPO", "TFT1", "TFT2"]
     with open('test.csv', 'w', newline='') as f_object:  
             # Pass the CSV  file object to the writer() function
             writer_object = writer(f_object)
@@ -155,41 +168,45 @@ if __name__ == "__main__":
             "framework": args.framework,
         },
     )
-    print("RUNNING")
+    # print("RUNNING")
     # tune.run("PPO", config=config,stop={"training_iteration": 10})
     for i in range(args.stop_iters):
         print("== Iteration", i, "==")
 
         # improve the DQN policy
         # print("-- SAC --")
-        # result_sac = sac_trainer.train()
-        # result_dqn = dqn_trainer.train()
+        if trainSAC:
+             result_sac = sac_trainer.train()
+        if trainDQN:
+            result_dqn = dqn_trainer.train()
         # print(result_dqn)
 
         # improve the PPO policy
         # print("-- PPO --")
-        result_ppo = ppo_trainer.train()
+        if trainPPO:
+            result_ppo = ppo_trainer.train()
         # print(result_ppo)
 
         # Test passed gracefully.
-        if (
-            args.as_test
-            # and result_sac["episode_reward_mean"] > args.stop_reward
-            # and result_dqn["episode_reward_mean"] > args.stop_reward
-            and result_ppo["episode_reward_mean"] > args.stop_reward
-        ):
-            print("test passed (both agents above requested reward)")
-            quit(0)
+        #if (
+        #   args.as_test
+            #and result_sac["episode_reward_mean"] > args.stop_reward
+            #and result_dqn["episode_reward_mean"] > args.stop_reward
+            #and result_ppo["episode_reward_mean"] > args.stop_reward
+        #):
+        #    print("test passed (both agents above requested reward)")
+        #    quit(0)
 
         # swap weights to synchronize
         # sac_trainer.set_weights(ppo_trainer.get_weights(["ppo_policy"]))
         # ppo_trainer.set_weights(sac_trainer.get_weights(["sac_policy"]))
-        # ppo_trainer.set_weights(dqn_trainer.get_weights(result_dqn["dqn"]))
-        # dqn_trainer.set_weights(ppo_trainer.get_weights(result_ppo["ppo_policy"]))
+        ppo_trainer.set_weights(dqn_trainer.get_weights(["dqn_policy"]))
+        dqn_trainer.set_weights(ppo_trainer.get_weights(["ppo_policy"]))
         # print(f"Per episode sac reward: {result_sac['episode_reward_mean']}")
-        print(f"Per episode ppo reward: {result_ppo['episode_reward_mean']}")
+        # print(f"Per episode ppo reward: {result_ppo['episode_reward_mean']}")
         # print(f"Per episode dqn reward: {result_dqn['episode_reward_mean']}")
-    ppo_trainer.save("ppo_ck")
-    #dqn_trainer.save("dqn_ck")
+    if trainPPO: ppo_trainer.save("ppo_ck")
+    if trainDQN: dqn_trainer.save("dqn_ck")
+    if trainSAC: sac_trainer.save("sac_ck")
     print("FINISHED")
 

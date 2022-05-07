@@ -1,0 +1,1 @@
+To run a simulation of the Prisoner's Dilemma, run "python controller.py". To change the reward function, change the enum at the top of env.py.

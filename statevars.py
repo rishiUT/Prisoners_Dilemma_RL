@@ -26,3 +26,8 @@ class REWARD(IntEnum):
     COMMUNISM = auto()
     SOCIALISM = auto()
     TEAM = auto()
+
+class ALGO(IntEnum):
+    PPO = auto()
+    SAC = auto()
+    DQN = auto()

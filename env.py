@@ -18,8 +18,8 @@ class PDGame(MultiAgentEnv):
         super().__init__()
         self.action_space = Discrete(2)
         self.state = None
-        self.num_agents = 2
-        self.reward_type = REWARD.REGULAR
+        self.num_agents = 4
+        self.reward_type = REWARD.TEAM
         self.rounds = random.randint(2, 10)
 
         self._agent_ids = {idx for idx in range(self.num_agents)}
@@ -70,7 +70,7 @@ class PDGame(MultiAgentEnv):
         self.next_match = next(self.gen)
         self.curr_round = 0
         self.rounds = random.randint(2, 10)
-        print("Env Reset")
+        #print("Env Reset")
         self.num_resets += 1
         return self._obs()
 
@@ -99,8 +99,8 @@ class PDGame(MultiAgentEnv):
         done = False
         self.curr_round += 1
         match_players = self.next_match
-        if 0 in action_dict.keys() and 1 in action_dict.keys():
-            print(action_dict)
+        #if 0 in action_dict.keys() and 1 in action_dict.keys():
+            #print(action_dict)
 
         self.print_to_csv(action_dict)
 
@@ -123,7 +123,7 @@ class PDGame(MultiAgentEnv):
                 self.num_match = 0
                 self.gen = combinations(range(self.num_agents),2)
             else:
-                print(f"Defect Ratio: {0 if self.agents_num_rounds[match_players[0]] == 0 else self.num_defections[match_players[0]] / self.agents_num_rounds[match_players[0]]}")
+                #print(f"Defect Ratio: {0 if self.agents_num_rounds[match_players[0]] == 0 else self.num_defections[match_players[0]] / self.agents_num_rounds[match_players[0]]}")
                 done = True
         else:
             self.next_match = next(self.gen)
@@ -174,7 +174,7 @@ class PDGame(MultiAgentEnv):
         if self.reward_type == REWARD.COMMUNISM:
             return self.get_default_reward(agent_act, opponent_act, agent_id, opp_id) + self.get_default_reward(opponent_act, agent_act, opp_id, agent_id)
         elif self.reward_type == REWARD.TEAM:
-            return self.get_team_reward(self, agent_act, opponent_act, agent_id, opp_id)
+            return self.get_team_reward(agent_act, opponent_act, agent_id, opp_id)
         elif self.reward_type == REWARD.SOCIALISM:
             extra_reward = self.get_default_reward(agent_act, opponent_act, agent_id, opp_id) + self.get_default_reward(opponent_act, agent_act, opp_id, agent_id)
 
@@ -189,7 +189,7 @@ class PDGame(MultiAgentEnv):
                 ind_reward = 3
             else:
                 ind_reward = 0
-        return extra_reward + ind_reward #ind_reward + avg_total_reward
+        return extra_reward * 0.1 + ind_reward #ind_reward + avg_total_reward
     def get_default_reward(self, agent_act, opponent_act, agent_id, opp_id):
         # There is a simpler way to implement this if defect and cooperate are 0 and 1,
         # But this method should stay accurate if we decide to change how we represent defect and cooperate
